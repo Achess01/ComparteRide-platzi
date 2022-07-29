@@ -8,6 +8,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils import timezone
 
+
 # Django REST framework
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
@@ -89,10 +90,9 @@ class UserSignUpSerializer(serializers.Serializer):
     def send_confirmation_email(self, user):
         """ Send account verification link to given user """
         verification_token = self.gen_verification_token(user)
-        subject = 'Welcome @{user.username}! Verify your account to start using Comparte Ride'
+        subject = f'Welcome @{user.username}! Verify your account to start using Comparte Ride'
         from_email = 'Comparte Ride <noreply@comparteride.com>'
         to = user.email
-
         content = render_to_string(
             'emails/users/account_verification.html',
             {
@@ -140,3 +140,28 @@ class UserLoginSerializer(serializers.Serializer):
         """ Generate or retrieve new token. """
         token, created = Token.objects.get_or_create(user=self.context['user'])
         return self.context['user'], token.key
+
+
+class AccountVerificationSerializer(serializers.Serializer):
+    """ Account verification serializer """
+    token = serializers.CharField()
+
+    def validate(self, data):
+        """ Verify token is valid """
+        try:
+            payload = jwt.decode(data['token'], settings.SECRET_KEY, algorithms=['HS256'])
+        except jwt.ExpiredSignatureError:
+            raise serializers.ValidationError('Verification link has expired')
+        except jwt.PyJWTError:
+            raise serializers.ValidationError('Invalid token')
+        if payload['type'] != 'email_confirmation':
+            raise serializers.ValidationError('Invalid token')
+        self.context['payload'] = payload
+        return data
+
+    def save(self):
+        """ Update user's verified status """
+        payload = self.context['payload']
+        user = User.objects.get(username=payload['user'])
+        user.is_verified = True
+        user.save()
