@@ -37,7 +37,7 @@ class Circle(CRideModel):
     )
 
     is_public = models.BooleanField(
-        default=False,
+        default=True,
         help_text='Pubilc circles are listed in the main page so everyone know about their existence'
     )
 
