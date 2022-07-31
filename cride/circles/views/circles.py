@@ -22,6 +22,7 @@ class CircleViewSet(
         viewsets.GenericViewSet):
     """ Circle view set """
     serializer_class = CircleModelSerializer
+    lookup_field = 'slug_name'
 
     def get_permissions(self):
         """ Assign permissions base on action """

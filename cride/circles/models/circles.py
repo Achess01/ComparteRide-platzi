@@ -54,7 +54,7 @@ class Circle(CRideModel):
 
     def __str__(self) -> str:
         """ Return circle name """
-        return self.name
+        return f'{self.name} {self.slug_name}'
 
     class Meta(CRideModel.Meta):
         """ Meta class """
