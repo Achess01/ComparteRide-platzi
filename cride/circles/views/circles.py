@@ -11,6 +11,9 @@ from cride.circles.serializers import CircleModelSerializer
 from cride.circles.models import Circle, Membership
 
 
+# Permisisons
+from cride.circles.permissions import IsCircleAdmin
+
 class CircleViewSet(
         mixins.CreateModelMixin,
         mixins.RetrieveModelMixin,
@@ -19,7 +22,13 @@ class CircleViewSet(
         viewsets.GenericViewSet):
     """ Circle view set """
     serializer_class = CircleModelSerializer
-    permission_classes = (IsAuthenticated,)
+
+    def get_permissions(self):
+        """ Assign permissions base on action """
+        permissions= [IsAuthenticated]
+        if self.action in ['update', 'partial_update']:
+            permissions.append(IsCircleAdmin)
+        return [permission() for permission in permissions]
 
     def get_queryset(self):
         """ Restrict list to public-only """
