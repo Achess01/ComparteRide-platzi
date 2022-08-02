@@ -1,7 +1,6 @@
 """ Membershipt model """
 
 # Django
-from pyexpat import model
 from django.db import models
 # Models
 from cride.utils.models import CRideModel

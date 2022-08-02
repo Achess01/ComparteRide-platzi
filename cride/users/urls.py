@@ -1,5 +1,6 @@
 """ Users urls """
 # Django
+from posixpath import basename
 from unicodedata import name
 from django.urls import path, include
 
@@ -12,7 +13,6 @@ from .views import UserViewSet
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='users')
-
 
 urlpatterns = [
     path('', include(router.urls))

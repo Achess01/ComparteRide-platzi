@@ -23,9 +23,13 @@ from datetime import timedelta
 # jwt
 import jwt
 
+# Serializers
+from .profile import ProfileModelSerializer
+
 
 class UserModelSerializer(serializers.ModelSerializer):
     """ User model serializer """
+    profile = ProfileModelSerializer(read_only=True)
 
     class Meta:
         """ Meta class """
@@ -35,7 +39,8 @@ class UserModelSerializer(serializers.ModelSerializer):
             'first_name',
             'last_name',
             'email',
-            'phone_number'
+            'phone_number',
+            'profile'
         )
 
 
