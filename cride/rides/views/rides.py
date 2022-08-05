@@ -2,11 +2,14 @@
 
 
 # Django REST Framework
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, viewsets, status
 from rest_framework.generics import get_object_or_404
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
 
 # Serializers
-from cride.rides.serializers import CreateRideSerializer, RideModelSerializer
+from cride.rides.serializers import CreateRideSerializer, RideModelSerializer, JoinRideSerializer
 
 # Models
 from cride.rides.models import Ride
@@ -15,6 +18,7 @@ from cride.circles.models import Circle
 # Permissions
 from cride.circles.permissions import IsActiveCircleMember
 from rest_framework.permissions import IsAuthenticated
+from cride.rides.permissions import IsRideOwner, IsNotRideOwner
 
 
 # Utilities
@@ -27,10 +31,10 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 
 class RideViewSet(mixins.ListModelMixin,
                   mixins.CreateModelMixin,
+                  mixins.UpdateModelMixin,
                   viewsets.GenericViewSet):
     """ Ride view set """
 
-    permission_classes = [IsAuthenticated, IsActiveCircleMember]
     filter_backends = (SearchFilter, OrderingFilter)
     ordering = ('departure_date', 'arrival_date', 'available_seats')
     ordering_fields = ('departure_date', 'arrival_date', 'available_seats')
@@ -48,10 +52,21 @@ class RideViewSet(mixins.ListModelMixin,
         context['circle'] = self.circle
         return context
 
+    def get_permissions(self):
+        """ Assign permissions based on action """
+        permissions = [IsAuthenticated, IsActiveCircleMember]
+        if self.action in ['update', 'partial_update']:
+            permissions.append(IsRideOwner)
+        if self.action == 'join':
+            permissions.append(IsNotRideOwner)
+        return [p() for p in permissions]
+
     def get_serializer_class(self):
         """ Return serializer based on action """
         if self.action == 'create':
             return CreateRideSerializer
+        if self.action == 'update':
+            return JoinRideSerializer
         return RideModelSerializer
 
     def get_queryset(self):
@@ -62,3 +77,20 @@ class RideViewSet(mixins.ListModelMixin,
             is_active=True,
             available_seats__gte=1
         )
+
+    @action(detail=True, methods=['post'])
+    def join(self, request, *args, **kwargs):
+        """ Add requesting user to ride """
+        print(request.user)
+        ride = self.get_object()
+        serializer = JoinRideSerializer(
+            ride,
+            data={'passenger': request.user.pk},
+            context={'ride': ride, 'circle': self.circle},
+            partial=True
+        )
+
+        serializer.is_valid(raise_exception=True)
+        ride = serializer.save()
+        data = RideModelSerializer(ride).data
+        return Response(data, status=status.HTTP_200_OK)
