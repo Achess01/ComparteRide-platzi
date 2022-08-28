@@ -2,6 +2,8 @@
 
 
 # Django REST Framework
+from crypt import methods
+from multiprocessing import context
 from rest_framework import mixins, viewsets, status
 from rest_framework.generics import get_object_or_404
 from rest_framework.decorators import action
@@ -9,7 +11,13 @@ from rest_framework.response import Response
 
 
 # Serializers
-from cride.rides.serializers import CreateRideSerializer, RideModelSerializer, JoinRideSerializer
+from cride.rides.serializers import (
+    CreateRideSerializer,
+    RideModelSerializer,
+    JoinRideSerializer,
+    EndRideSerializer,
+    CreateRideRatingSerializer,
+)
 
 # Models
 from cride.rides.models import Ride
@@ -31,6 +39,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 
 class RideViewSet(mixins.ListModelMixin,
                   mixins.CreateModelMixin,
+                  mixins.RetrieveModelMixin,
                   mixins.UpdateModelMixin,
                   viewsets.GenericViewSet):
     """ Ride view set """
@@ -55,7 +64,7 @@ class RideViewSet(mixins.ListModelMixin,
     def get_permissions(self):
         """ Assign permissions based on action """
         permissions = [IsAuthenticated, IsActiveCircleMember]
-        if self.action in ['update', 'partial_update']:
+        if self.action in ['update', 'partial_update', 'finish']:
             permissions.append(IsRideOwner)
         if self.action == 'join':
             permissions.append(IsNotRideOwner)
@@ -67,23 +76,31 @@ class RideViewSet(mixins.ListModelMixin,
             return CreateRideSerializer
         if self.action == 'update':
             return JoinRideSerializer
+        if self.action == 'finish':
+            return EndRideSerializer
+        if self.action == 'rate':
+            return CreateRideRatingSerializer
         return RideModelSerializer
 
     def get_queryset(self):
         """ Return active circle's rides. """
-        offset = timezone.now() + timedelta(minutes=10)
-        return self.circle.ride_set.filter(
-            departure_date__gte=offset,
-            is_active=True,
-            available_seats__gte=1
-        )
+        if self.action not in ['finish', 'retrieve']:
+            offset = timezone.now() + timedelta(minutes=10)
+            return self.circle.ride_set.filter(
+                departure_date__gte=offset,
+                is_active=True,
+                available_seats__gte=1
+            )
+
+        return self.circle.ride_set.all()
 
     @action(detail=True, methods=['post'])
     def join(self, request, *args, **kwargs):
         """ Add requesting user to ride """
         print(request.user)
         ride = self.get_object()
-        serializer = JoinRideSerializer(
+        serializer_class = self.get_serializer_class()
+        serializer = serializer_class(
             ride,
             data={'passenger': request.user.pk},
             context={'ride': ride, 'circle': self.circle},
@@ -94,3 +111,33 @@ class RideViewSet(mixins.ListModelMixin,
         ride = serializer.save()
         data = RideModelSerializer(ride).data
         return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def finish(self, request, *args, **kwargs):
+        """ Call by owners to finish a ride """
+        ride = self.get_object()
+        serializer_class = self.get_serializer_class()
+        serializer = serializer_class(
+            ride,
+            data={'is_active': False, 'current_time': timezone.now()},
+            context=self.get_serializer_context(),
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        ride = serializer.save()
+        data = RideModelSerializer(ride).data
+        return Response(data, status=status.HTTP_200_OK)
+
+
+    @action(detail=True, methods=['post'])
+    def rate(self, request, *args, **kwargs):
+        """Rate ride."""
+        ride = self.get_object()
+        serializer_class = self.get_serializer_class()
+        context = self.get_serializer_context()
+        context['ride'] = ride
+        serializer = serializer_class(data=request.data, context=context)
+        serializer.is_valid(raise_exception=True)
+        ride = serializer.save()
+        data = RideModelSerializer(ride).data
+        return Response(data, status=status.HTTP_201_CREATED)
